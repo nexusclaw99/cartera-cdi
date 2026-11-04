@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Cartera CDI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+/* Lo que en Claude define la plataforma: tipografías, espaciados y tamaños */
+:root {
+  --font-anthropic-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-anthropic-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --cds-gap-xs: 6px; --cds-gap-sm: 10px; --cds-gap-md: 16px; --cds-gap-lg: 24px;
+  --cds-pad-xs: 6px; --cds-pad-sm: 10px; --cds-pad-md: 14px; --cds-pad-lg: 20px; --cds-pad-xl: 28px;
+  --cds-radius: 8px; --cds-dur-slow: .3s;
+  --cds-font-size-caption: 12px; --cds-font-size-body: 14px; --cds-font-size-heading: 16px; --cds-font-size-title: 28px;
+  --cds-font-weight-medium: 600;
+  color-scheme: light;
+}
+html, body { margin: 0; background: #EEF0F3; }
+body { padding: 16px; }
+#dash-root { font-size: 14px; line-height: 1.45; }
+.cb-site-foot { max-width: 1180px; margin: 12px auto 0; color: #5B6577; font: 12px/1.4 var(--font-anthropic-sans); text-align: center; }
+</style>
+<script>
+/* Cargador de datos: reemplaza al de la plataforma (dash.data, dash.draw, dash.onData) */
+window.dash = (function () {
+  const IDS = ['serie', 'resumen', 'componentes', 'mensual', 'cambios', 'composicion'];
+  const store = {}; const draws = []; const listeners = [];
+  IDS.forEach((id) => { store[id] = {status: 'loading', data: [], columns: []}; });
+  const run = () => {
+    listeners.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
+    draws.forEach(([name, fn]) => document.querySelectorAll('[data-draw="' + name + '"]').forEach((el) => {
+      try { fn(el); } catch (e) { console.error(name, e); }
+    }));
+  };
+  let t = null;
+  window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(run, 150); });
+  document.addEventListener('DOMContentLoaded', () => {
+    Promise.all(IDS.map((id) => fetch('data/' + id + '.json?v=' + Date.now(), {cache: 'no-store'})
+      .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then((rows) => { store[id] = {status: 'ok', data: rows, columns: rows.length ? Object.keys(rows[0]) : []}; })
+      .catch((e) => { store[id] = {status: 'error', data: [], columns: [], message: String(e)}; })))
+      .then(run);
+  });
+  return {
+    data: (id) => store[id] || {status: 'missing', data: [], columns: []},
+    draw: (name, fn) => { draws.push([name, fn]); },
+    onData: (fn) => { listeners.push(fn); },
+    colors: ['#C9A55C', '#0B1F3A', '#5B8DB8', '#8A6D3B', '#3E7C59', '#B8382E', '#7A6FA8', '#9AA3B2'],
+  };
+})();
+</script>
+</head>
+<body>
+<div id="dash-root">
+<style>
+/* Formato claro fijo: el tablero se ve claro aunque el lector use el tema oscuro */
+#dash-root { --cdi-navy: #0B1F3A; --cdi-gold: #C9A55C; --cdi-gold-soft: rgba(201,165,92,.14);
+  --color-fg: #1A2333; --color-fg-muted: #5B6577; --color-bg: #F4F5F7; --color-panel: #FFFFFF; --color-border-line: #DFE3EA;
+  --color-ok: #1D7A4C; --color-warn: #A86400; --color-bad: #B8382E;
+  --cds-text-secondary: #5B6577; --cds-surface-popover: #FFFFFF; --cds-shadow-popover: 0 4px 16px rgba(16,24,40,.12); --cds-border: #DFE3EA;
+  --cds-chart-axis: #8A93A3; --cds-chart-grid: #ECEFF3; --cds-chart-reference: #9AA3B2; --cds-chart-muted: #B7BEC9; --cds-chart-status-critical: #B8382E;
+  color-scheme: light; color: var(--color-fg); }
+.cb-page { font-family: var(--font-anthropic-sans); display: grid; gap: var(--cds-gap-lg); max-width: 1180px; margin-inline: auto; background: var(--color-bg); color: var(--color-fg); border-radius: var(--cds-radius); padding: clamp(12px, 2.5vw, 28px); }
+.cb-hero { background: var(--cdi-navy); color: #fff; border-radius: var(--cds-radius); padding: var(--cds-pad-lg) var(--cds-pad-xl); display: grid; gap: var(--cds-gap-sm); }
+.cb-eyebrow { color: var(--cdi-gold); letter-spacing: .14em; text-transform: uppercase; font-size: var(--cds-font-size-caption); font-weight: var(--cds-font-weight-medium); margin: 0; }
+.cb-hero h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; color: #fff; }
+.cb-hero p { margin: 0; color: rgba(255,255,255,.86); font-size: var(--cds-font-size-body); line-height: 1.5; }
+.cb-hero .cb-asof { color: rgba(255,255,255,.62); font-size: var(--cds-font-size-caption); }
+.cb-hero b { color: #fff; font-weight: 600; }
+.cb-kpis { display: grid; gap: var(--cds-gap-md); grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); }
+.cb-kpi { background: var(--color-panel); border: 1px solid var(--color-border-line); border-top: 3px solid var(--cdi-gold); border-radius: var(--cds-radius); padding: var(--cds-pad-md) var(--cds-pad-lg); display: grid; gap: var(--cds-gap-xs); }
+.cb-kpi-label { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); text-transform: uppercase; letter-spacing: .08em; margin: 0; }
+.cb-kpi-value { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; margin: 0; min-height: 1.3em; }
+.cb-kpi-sub { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0; font-variant-numeric: tabular-nums; }
+.cb-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: grid; gap: var(--cds-gap-sm); min-width: 0; }
+.cb-card h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+.cb-note { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0; line-height: 1.45; }
+.cb-section-title { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: var(--cds-gap-md) 0 0; color: var(--color-fg); border-left: 3px solid var(--cdi-gold); padding-left: var(--cds-pad-sm); }
+.cb-grid2 { display: grid; gap: var(--cds-gap-md); grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); }
+.cb-chart { position: relative; min-height: 300px; }
+.cb-chart.cb-short { min-height: 260px; }
+.cb-multiples { display: grid; gap: var(--cds-gap-md); grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); min-height: 140px; }
+.cb-mini { border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-sm) var(--cds-pad-md); display: grid; gap: 2px; }
+.cb-mini-name { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.cb-mini-val { font-family: var(--font-anthropic-serif); font-size: var(--cds-font-size-heading); font-variant-numeric: tabular-nums; }
+.cb-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0; padding: 0; list-style: none; }
+.cb-legend li { display: flex; align-items: center; gap: 6px; }
+.cb-sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.cb-sw-gold { background: var(--cdi-gold); }
+.cb-sw-muted { background: var(--cds-chart-muted); }
+.cb-tablewrap { overflow-x: auto; }
+.cb-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-body); font-variant-numeric: tabular-nums; }
+.cb-table th { text-align: left; font-weight: var(--cds-font-weight-medium); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); text-transform: uppercase; letter-spacing: .05em; padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+.cb-table td { padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); vertical-align: top; }
+.cb-table .num { text-align: right; white-space: nowrap; }
+.cb-table tr.cb-total td { font-weight: 600; background: var(--cdi-gold-soft); }
+.cb-pos { color: var(--color-ok); }
+.cb-neg { color: var(--color-bad); }
+.cb-pend { color: var(--color-fg-muted); font-style: italic; }
+.cb-tag { display: inline-block; font-size: var(--cds-font-size-caption); padding: 1px 8px; border-radius: 999px; background: var(--cdi-gold-soft); color: var(--color-fg); white-space: nowrap; }
+.cb-scroll { max-height: 26rem; overflow: auto; }
+.cb-scroll th { position: sticky; top: 0; background: var(--color-panel); }
+.cb-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); white-space: nowrap; z-index: 2; }
+.cb-tip .d { color: var(--cds-text-secondary); margin-bottom: 2px; }
+.cb-method { display: grid; gap: var(--cds-gap-xs); }
+.cb-method p { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); line-height: 1.5; }
+.cb-method b { color: var(--color-fg); font-weight: 600; }
+[data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+[data-dash-source-state=empty] { color: transparent; }
+</style>
+
+<div class="cb-page">
+  <header class="cb-hero" id="inicio">
+    <p class="cb-eyebrow">CDI Capital · Cartera en observación</p>
+    <h1>Cartera CDI</h1>
+    <p class="cb-take-full" hidden>Desde el inicio, el <b>1 de octubre de 2026</b>, la cartera acumula <b data-draw="take-cartera" data-source="resumen" data-field="rend_inicio">—</b>, con una caída máxima de <b data-draw="take-dd" data-source="resumen" data-field="caida_maxima">—</b>.</p>
+    <p class="cb-take-partial">Seguimiento diario de la cartera propuesta, como si fuera un fondo, desde el 1 de octubre de 2026. El valor de la cartera se publica cuando estén cargados todos sus componentes; faltan: <b data-draw="pendientes" data-source="resumen" data-field="pendientes">—</b>.</p>
+    <p class="cb-asof">Datos al cierre del <span data-draw="fecha-datos" data-source="resumen" data-field="fecha_datos">—</span> · Actualización diaria</p>
+  </header>
+
+  <section class="cb-kpis" aria-label="Resumen">
+    <div class="cb-kpi">
+      <p class="cb-kpi-label">Rendimiento desde el inicio (1/10)</p>
+      <p class="cb-kpi-value" data-draw="kpi-inicio" data-source="resumen" data-field="rend_inicio">—</p>
+    </div>
+    <div class="cb-kpi">
+      <p class="cb-kpi-label">Rendimiento del mes (MTD)</p>
+      <p class="cb-kpi-value" data-draw="kpi-mes" data-source="resumen" data-field="rend_mes">—</p>
+    </div>
+    <div class="cb-kpi">
+      <p class="cb-kpi-label">Caída máxima</p>
+      <p class="cb-kpi-value" data-draw="kpi-dd" data-source="resumen" data-field="caida_maxima">—</p>
+    </div>
+    <div class="cb-kpi">
+      <p class="cb-kpi-label">Volatilidad anualizada</p>
+      <p class="cb-kpi-value" data-draw="kpi-vol" data-source="resumen" data-field="volatilidad">—</p>
+    </div>
+  </section>
+
+  <section class="cb-card" id="valor-cuota">
+    <h2>Valor cuota de la cartera</h2>
+    <p class="cb-note">Base 100 al inicio, el 1 de octubre de 2026 (con los precios de cierre del 30 de septiembre). Valores de cierre de cada día hábil.</p>
+    <div class="cb-chart" data-draw="chart-nav" data-source="serie"></div>
+    <p class="cb-note cb-nav-partial">El gráfico se completa cuando estén cargados todos los componentes.</p>
+  </section>
+
+  <h2 class="cb-section-title" id="estrategias">Qué aporta cada estrategia</h2>
+  <section class="cb-card">
+    <h2>Rendimiento y aporte por componente</h2>
+    <p class="cb-note">El aporte es la parte del rendimiento de la cartera que explica cada componente, según su peso y su rendimiento. La suma de los aportes da el rendimiento de la cartera.</p>
+    <div class="cb-tablewrap">
+      <table class="cb-table" data-source="componentes" data-row-key="componente">
+        <thead><tr>
+          <th data-field="componente">Componente</th>
+          <th data-field="peso_objetivo" class="num">Peso objetivo</th>
+          <th data-field="peso_actual" class="num">Peso actual</th>
+          <th data-field="rend_mes" class="num">En el mes</th>
+          <th data-field="rend_inicio" class="num">Desde el inicio</th>
+          <th data-field="aporte_inicio" class="num">Aporte desde el inicio</th>
+        </tr></thead>
+        <tbody data-draw="tabla-componentes"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="cb-grid2">
+    <section class="cb-card">
+      <h2>Aporte de cada componente desde el inicio</h2>
+      <p class="cb-note">En puntos porcentuales del rendimiento de la cartera.</p>
+      <div class="cb-chart cb-short" data-draw="chart-aporte" data-source="componentes"></div>
+    </section>
+    <section class="cb-card">
+      <h2>Rendimiento de cada componente desde el inicio</h2>
+      <p class="cb-note">Cada componente medido por separado, antes de ponderarlo en la cartera.</p>
+      <div class="cb-chart cb-short" data-draw="chart-rend" data-source="componentes"></div>
+    </section>
+  </div>
+
+  <section class="cb-card">
+    <h2>Evolución diaria de cada componente</h2>
+    <p class="cb-note">Base 100 al inicio (1 de octubre de 2026); cada gráfico tiene su propia escala.</p>
+    <div class="cb-multiples" data-draw="multiples" data-source="serie componentes"></div>
+  </section>
+
+  <h2 class="cb-section-title" id="mensual">Rendimiento mes a mes</h2>
+  <section class="cb-card">
+    <h2>Rendimiento mensual de la cartera y sus componentes</h2>
+    <p class="cb-note">El mes en curso va hasta la última fecha de datos.</p>
+    <div class="cb-tablewrap">
+      <table class="cb-table" data-source="mensual" data-row-key="mes">
+        <thead><tr>
+          <th data-field="mes">Mes</th>
+          <th data-field="cartera" class="num">Cartera</th>
+          <th data-field="ts" class="num">TrendStrategy</th>
+          <th data-field="mf" class="num">Managed Futures</th>
+          <th data-field="taas" class="num">Alocación táctica</th>
+          <th data-field="letras" class="num">Letras</th>
+          <th data-field="tips" class="num">TIPS</th>
+          <th data-field="intl" class="num">Bonos internac.</th>
+          <th data-field="ons" class="num">ONs</th>
+          <th data-field="arg" class="num">Bonos arg.</th>
+        </tr></thead>
+        <tbody data-draw="tabla-mensual"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <h2 class="cb-section-title" id="composicion">Composición y cambios</h2>
+  <div class="cb-grid2">
+    <section class="cb-card">
+      <h2>Composición objetivo</h2>
+      <p class="cb-note">Pesos objetivo sobre el total de la cartera. Entre rebalanceos, los pesos se mueven con el mercado.</p>
+      <div class="cb-tablewrap cb-scroll">
+        <table class="cb-table" data-source="composicion" data-row-key="n">
+          <thead><tr>
+            <th data-field="componente">Componente</th>
+            <th data-field="instrumento">Instrumento</th>
+            <th data-field="peso_cartera" class="num">Peso</th>
+          </tr></thead>
+          <tbody data-draw="tabla-composicion"></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="cb-card" id="registro">
+      <h2>Registro de cambios</h2>
+      <p class="cb-note">Cada cambio de composición queda anotado con su fecha, en el momento en que se hace.</p>
+      <div class="cb-tablewrap cb-scroll">
+        <table class="cb-table" data-source="cambios" data-row-key="n">
+          <thead><tr>
+            <th data-field="fecha">Fecha</th>
+            <th data-field="tipo">Tipo</th>
+            <th data-field="detalle">Detalle</th>
+          </tr></thead>
+          <tbody data-draw="tabla-cambios"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section class="cb-card cb-method" id="metodologia">
+    <h2>Cómo se calcula</h2>
+    <p><b>Valor cuota.</b> La cartera arranca el 1 de octubre de 2026 con un valor de 100, tomando los precios de cierre del 30 de septiembre, y se valúa cada día hábil con precios de cierre, como un fondo. Los cupones, dividendos y amortizaciones se suman al valor del componente que los paga.</p>
+    <p><b>Rebalanceo.</b> Al cierre del último día hábil de cada mes, todos los componentes vuelven a su peso objetivo. Cualquier cambio de composición fuera de ese calendario se anota en el registro con su fecha.</p>
+    <p><b>TrendStrategy.</b> Se calcula aplicando sus reglas mecanizadas a los activos que opera, con revisión mensual de las señales de tendencia.</p>
+    <p><b>Renta fija argentina.</b> Obligaciones negociables bajo ley de Nueva York y bonos soberanos cortos, valuados al precio en dólar cable.</p>
+    <p><b>TIPS.</b> Se valúan a partir de su tasa real de mercado y del índice de inflación de referencia que publica el Tesoro de EE.UU.</p>
+    <p>Los rendimientos son brutos de comisiones de gestión. Este material es informativo y no constituye una oferta ni una recomendación de inversión. Los rendimientos pasados no garantizan resultados futuros. CDI Capital · clubdeinversores.com</p>
+  </section>
+</div>
+
+<script>
+(function () {
+  const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const MESES_L = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  const NOMBRES = {ts: 'TrendStrategy', mf: 'Managed Futures', taas: 'Alocación táctica', letras: 'Letras del Tesoro', tips: 'TIPS 0-5 años', intl: 'Bonos internacionales', ons: 'Obligaciones negociables', arg: 'Bonos argentinos'};
+  const ORDEN = ['ts', 'mf', 'taas', 'letras', 'tips', 'intl', 'ons', 'arg'];
+  const GOLD = '#C9A55C';
+  const num = (v, d) => (v == null || isNaN(v)) ? null : Number(v).toLocaleString('es-AR', {minimumFractionDigits: d, maximumFractionDigits: d});
+  const pct = (v, d = 2, sign = true) => { const s = num(v, d); return s == null ? '—' : ((sign && v > 0) ? '+' : '') + s + '%'; };
+  const fecha = (s) => { if (!s) return '—'; const [y, m, d] = s.split('-').map(Number); return d + ' ' + MESES[m - 1] + ' ' + y; };
+  const fechaLarga = (s) => { if (!s) return '—'; const [y, m, d] = s.split('-').map(Number); return d + ' de ' + MESES_L[m - 1].toLowerCase() + ' de ' + y; };
+  const mesTxt = (s) => { const [y, m] = s.split('-').map(Number); return MESES_L[m - 1] + ' ' + y; };
+  const tone = (el, v) => { el.classList.toggle('cb-pos', v > 0); el.classList.toggle('cb-neg', v < 0); };
+  const resumen = () => { const r = dash.data('resumen'); return r.status === 'ok' && r.data.length ? r.data[0] : null; };
+  window.cbFmt = {pct, fecha, fechaLarga, mesTxt, num, NOMBRES, ORDEN, GOLD, tone, resumen};
+
+  dash.onData(() => {
+    const r = resumen();
+    const full = !!(r && r.completa);
+    document.querySelectorAll('.cb-take-full').forEach((el) => { el.hidden = !full; });
+    document.querySelectorAll('.cb-take-partial').forEach((el) => { el.hidden = full; });
+    document.querySelectorAll('.cb-nav-partial').forEach((el) => { el.hidden = full; });
+  });
+
+  const text = (name, fn) => dash.draw(name, (el) => { const r = resumen(); el.textContent = r ? fn(r) : '—'; });
+  text('fecha-datos', (r) => fechaLarga(r.fecha_datos));
+  text('pendientes', (r) => r.pendientes || '—');
+  text('take-cartera', (r) => pct(r.rend_inicio));
+  text('take-dd', (r) => pct(r.caida_maxima));
+  const kpi = (name, field, d = 2, sign = true) => dash.draw(name, (el) => {
+    const r = resumen(); const v = r ? r[field] : null;
+    el.textContent = pct(v, d, sign);
+    if (sign) tone(el, v);
+  });
+  kpi('kpi-inicio', 'rend_inicio');
+  kpi('kpi-mes', 'rend_mes');
+  kpi('kpi-dd', 'caida_maxima', 2, false);
+  kpi('kpi-vol', 'volatilidad', 1, false);
+})();
+</script>
+
+<script>
+(function () {
+  const F = window.cbFmt;
+  function lineChart(el, rows, series, opts) {
+    el.replaceChildren();
+    const W = el.clientWidth || 600, H = opts.height || 300;
+    const parse = (s) => new Date(s + 'T00:00:00Z');
+    const pts = rows.map((r) => ({d: parse(r.fecha), r}));
+    const vals = [];
+    series.forEach((s) => pts.forEach((p) => { const v = p.r[s.key]; if (v != null) vals.push(+v); }));
+    if (!vals.length) return;
+    let lo = d3.min(vals), hi = d3.max(vals); const pad = Math.max((hi - lo) * 0.12, 0.25); lo -= pad; hi += pad;
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img');
+    // Cantidad de marcas del eje según la altura, para que las etiquetas no se pisen en los gráficos chicos
+    const nY = Math.min(5, Math.max(2, Math.floor((H - 36) / 24)));
+    const y = d3.scaleLinear([lo, hi], [H - 26, 10]).nice(nY);
+    const ticks = y.ticks(nY);
+    const tmp = svg.append('text').attr('font-size', 11).text(d3.max(ticks, (t) => F.num(t, 1)) || '');
+    const mL = Math.ceil(tmp.node().getComputedTextLength()) + 12; tmp.remove();
+    const x = d3.scaleUtc(d3.extent(pts, (p) => p.d), [mL, W - 12]);
+    svg.append('g').selectAll('line').data(ticks).join('line').attr('x1', mL).attr('x2', W - 12).attr('y1', (t) => y(t)).attr('y2', (t) => y(t)).attr('stroke', 'var(--cds-chart-grid)');
+    svg.append('g').selectAll('text').data(ticks).join('text').attr('x', mL - 8).attr('y', (t) => y(t) + 4).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text((t) => F.num(t, 1));
+    if (opts.base != null) svg.append('line').attr('x1', mL).attr('x2', W - 12).attr('y1', y(opts.base)).attr('y2', y(opts.base)).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '3 3');
+    const nT = Math.max(2, Math.min(6, Math.floor((W - mL) / 90)));
+    const xt = x.ticks(nT);
+    svg.append('g').selectAll('text').data(xt).join('text').attr('x', (t) => x(t)).attr('y', H - 6).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text((t) => t.getUTCDate() + ' ' + ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][t.getUTCMonth()]);
+    series.forEach((s) => {
+      const ok = pts.filter((p) => p.r[s.key] != null);
+      if (!ok.length) return;
+      svg.append('path').datum(ok).attr('fill', 'none').attr('stroke', s.color).attr('stroke-width', s.width || 2).attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round')
+        .attr('d', d3.line().x((p) => x(p.d)).y((p) => y(+p.r[s.key])));
+    });
+    const tip = d3.select(el).append('div').attr('class', 'cb-tip').style('display', 'none');
+    const dots = series.map((s) => svg.append('circle').attr('r', 3.5).attr('fill', s.color).style('display', 'none'));
+    const rule = svg.append('line').attr('y1', 10).attr('y2', H - 26).attr('stroke', 'var(--cds-chart-axis)').style('display', 'none');
+    const bis = d3.bisector((p) => p.d).center;
+    svg.append('rect').attr('x', mL).attr('y', 0).attr('width', W - 12 - mL).attr('height', H - 26).attr('fill', 'transparent')
+      .on('mousemove', (ev) => {
+        const [mx] = d3.pointer(ev); const p = pts[bis(pts, x.invert(mx))]; if (!p) return;
+        const px = x(p.d); rule.attr('x1', px).attr('x2', px).style('display', null);
+        tip.style('display', null).replaceChildren();
+        tip.append('div').attr('class', 'd').text(F.fecha(p.r.fecha));
+        series.forEach((s, i) => {
+          const v = p.r[s.key];
+          if (v == null) { dots[i].style('display', 'none'); return; }
+          dots[i].attr('cx', px).attr('cy', y(+v)).style('display', null);
+          const row = tip.append('div');
+          row.append('span').style('display', 'inline-block').style('width', '10px').style('height', '3px').style('margin-right', '6px').style('vertical-align', 'middle').style('background', s.color);
+          row.append('span').text(s.name + ': ' + F.num(+v, 2) + (opts.base != null ? '  (' + F.pct(+v / opts.base * 100 - 100) + ')' : ''));
+        });
+        const tw = tip.node().offsetWidth; const left = Math.min(Math.max(px / W * el.clientWidth + 12, 0), el.clientWidth - tw - 4);
+        tip.style('left', left + 'px').style('top', '8px');
+      })
+      .on('mouseleave', () => { tip.style('display', 'none'); rule.style('display', 'none'); dots.forEach((d) => d.style('display', 'none')); });
+  }
+
+  dash.draw('chart-nav', (el) => {
+    const s = dash.data('serie');
+    if (s.status !== 'ok') { el.replaceChildren(); return; }
+    lineChart(el, s.data, [
+      {key: 'cartera', name: 'Cartera CDI', color: F.GOLD, width: 2.5},
+    ], {height: 300, base: 100});
+  });
+
+  dash.draw('multiples', (el) => {
+    const s = dash.data('serie'), c = dash.data('componentes');
+    el.replaceChildren();
+    if (s.status !== 'ok' || c.status !== 'ok') return;
+    const byId = Object.fromEntries(c.data.map((r) => [r.id, r]));
+    const pendientes = [];
+    F.ORDEN.forEach((k) => {
+      const box = d3.select(el).append('div').attr('class', 'cb-mini');
+      const info = byId[k] || {};
+      box.append('div').attr('class', 'cb-mini-name').text(info.componente || F.NOMBRES[k]);
+      const v = box.append('div').attr('class', 'cb-mini-val');
+      if (info.estado === 'pendiente' || s.data[0][k] === undefined) {
+        v.text('Pendiente').classed('cb-pend', true);
+        box.append('div').style('height', '60px');
+        return;
+      }
+      v.text(F.pct(info.rend_inicio));
+      F.tone(v.node(), info.rend_inicio);
+      const chart = box.append('div').style('position', 'relative').node();
+      pendientes.push([chart, k, info]);
+    });
+    // Los gráficos se dibujan cuando ya están todas las cajas, así cada uno toma el ancho final de su columna
+    pendientes.forEach(([chart, k, info]) => lineChart(chart, s.data, [{key: k, name: info.componente || F.NOMBRES[k], color: F.GOLD}], {height: 90, base: 100}));
+  });
+
+  function barChart(el, rows, field) {
+    el.replaceChildren();
+    const data = rows.filter((r) => r[field] != null);
+    const pend = rows.filter((r) => r[field] == null);
+    if (!data.length) return;
+    const W = el.clientWidth || 500, rowH = 26, H = (data.length + pend.length) * rowH + 24;
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+    const tmp = svg.append('text').attr('font-size', 12).text(d3.max(rows, (r) => r.componente) || '');
+    let mL = 0; rows.forEach((r) => { tmp.text(r.componente); mL = Math.max(mL, tmp.node().getComputedTextLength()); }); tmp.remove();
+    mL = Math.min(mL + 14, W * 0.45);
+    // Lugar reservado para las etiquetas de valor a cada lado, así no pisan los nombres
+    const lab = svg.append('text').attr('font-size', 11);
+    let padNeg = 0, padPos = 0;
+    data.forEach((r) => { const v = +r[field]; lab.text(F.pct(v)); const w = lab.node().getComputedTextLength() + 10; if (v < 0) padNeg = Math.max(padNeg, w); else padPos = Math.max(padPos, w); });
+    lab.remove();
+    const ext = d3.extent([0, ...data.map((r) => +r[field])]);
+    if (ext[1] - ext[0] < 0.01) ext[1] = ext[0] + 0.01;
+    const x = d3.scaleLinear(ext, [mL + padNeg, Math.max(mL + padNeg + 40, W - 10 - padPos)]);
+    const all = [...data, ...pend];
+    svg.append('line').attr('x1', x(0)).attr('x2', x(0)).attr('y1', 4).attr('y2', H - 20).attr('stroke', 'var(--cds-chart-axis)');
+    all.forEach((r, i) => {
+      const yy = 8 + i * rowH;
+      svg.append('text').attr('x', mL - 8).attr('y', yy + 13).attr('text-anchor', 'end').attr('font-size', 12).attr('fill', 'var(--color-fg)').text(r.componente);
+      if (r[field] == null) {
+        svg.append('text').attr('x', x(0) + 6).attr('y', yy + 13).attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').attr('font-style', 'italic').text('Pendiente');
+        return;
+      }
+      const v = +r[field];
+      svg.append('rect').attr('x', Math.min(x(0), x(v))).attr('y', yy + 2).attr('width', Math.max(1, Math.abs(x(v) - x(0)))).attr('height', 16).attr('rx', 3)
+        .attr('fill', v >= 0 ? F.GOLD : 'var(--cds-chart-status-critical)');
+      svg.append('text').attr('x', v >= 0 ? x(v) + 6 : x(v) - 6).attr('y', yy + 14).attr('text-anchor', v >= 0 ? 'start' : 'end').attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text(F.pct(v));
+    });
+  }
+  dash.draw('chart-aporte', (el) => { const c = dash.data('componentes'); if (c.status !== 'ok') { el.replaceChildren(); return; } barChart(el, c.data, 'aporte_inicio'); });
+  dash.draw('chart-rend', (el) => { const c = dash.data('componentes'); if (c.status !== 'ok') { el.replaceChildren(); return; } barChart(el, c.data, 'rend_inicio'); });
+})();
+</script>
+
+<script>
+(function () {
+  const F = window.cbFmt;
+  const cell = (tr, txt, cls) => { const td = document.createElement('td'); td.textContent = txt; if (cls) td.className = cls; tr.appendChild(td); return td; };
+  const pctCell = (tr, v, pend) => { const td = cell(tr, pend ? 'Pendiente' : F.pct(v), 'num'); if (pend) td.classList.add('cb-pend'); else F.tone(td, v); return td; };
+
+  dash.draw('tabla-componentes', (tb) => {
+    const c = dash.data('componentes');
+    tb.replaceChildren();
+    if (c.status !== 'ok') return;
+    c.data.forEach((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.componente;
+      const td = cell(tr, r.componente);
+      const sub = document.createElement('div'); sub.className = 'cb-note'; sub.textContent = r.tipo; td.appendChild(sub);
+      const pend = r.estado === 'pendiente';
+      cell(tr, F.pct(r.peso_objetivo, 1, false), 'num');
+      cell(tr, r.peso_actual == null ? '—' : F.pct(r.peso_actual, 1, false), 'num');
+      pctCell(tr, r.rend_mes, pend); pctCell(tr, r.rend_inicio, pend); pctCell(tr, r.aporte_inicio, pend);
+      tb.appendChild(tr);
+    });
+  });
+
+  dash.draw('tabla-mensual', (tb) => {
+    const m = dash.data('mensual');
+    tb.replaceChildren();
+    if (m.status !== 'ok') return;
+    [...m.data].reverse().forEach((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.mes;
+      cell(tr, F.mesTxt(r.mes) + (r.cerrado ? '' : ' (en curso)'));
+      ['cartera', ...F.ORDEN].forEach((k) => {
+        const v = r[k];
+        const td = cell(tr, v == null ? (k === 'cartera' ? '—' : 'Pendiente') : F.pct(v), 'num');
+        if (v == null) td.classList.add('cb-pend'); else F.tone(td, v);
+        if (k === 'cartera') td.style.fontWeight = '600';
+      });
+      tb.appendChild(tr);
+    });
+  });
+
+  dash.draw('tabla-composicion', (tb) => {
+    const c = dash.data('composicion');
+    tb.replaceChildren();
+    if (c.status !== 'ok') return;
+    let last = null;
+    c.data.forEach((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.n;
+      cell(tr, r.componente === last ? '' : r.componente);
+      cell(tr, r.instrumento);
+      cell(tr, F.pct(r.peso_cartera, 2, false), 'num');
+      last = r.componente;
+      tb.appendChild(tr);
+    });
+  });
+
+  dash.draw('tabla-cambios', (tb) => {
+    const c = dash.data('cambios');
+    tb.replaceChildren();
+    if (c.status !== 'ok') return;
+    c.data.forEach((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.n;
+      const f = cell(tr, F.fecha(r.fecha)); f.style.whiteSpace = 'nowrap';
+      const t = cell(tr, ''); const tag = document.createElement('span'); tag.className = 'cb-tag'; tag.textContent = r.tipo; t.appendChild(tag);
+      cell(tr, r.detalle);
+      tb.appendChild(tr);
+    });
+  });
+})();
+</script>
+</div>
+<p class="cb-site-foot">Se actualiza cada día hábil después del cierre.</p>
+</body>
+</html>
