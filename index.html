@@ -28,14 +28,16 @@ body { padding: 16px; }
 <script>
 /* Cargador de datos: reemplaza al de la plataforma (dash.data, dash.draw, dash.onData) */
 window.dash = (function () {
-  const IDS = ['serie', 'resumen', 'componentes', 'mensual', 'cambios', 'composicion'];
+  const IDS = ['serie', 'resumen', 'componentes', 'mensual', 'cambios', 'composicion', 'periodos'];
+  let params = {periodo: 'inicio'};
   const store = {}; const draws = []; const listeners = [];
   IDS.forEach((id) => { store[id] = {status: 'loading', data: [], columns: []}; });
+  const runOne = (name, fn) => document.querySelectorAll('[data-draw="' + name + '"]').forEach((el) => {
+    try { fn(el); } catch (e) { console.error(name, e); }
+  });
   const run = () => {
     listeners.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
-    draws.forEach(([name, fn]) => document.querySelectorAll('[data-draw="' + name + '"]').forEach((el) => {
-      try { fn(el); } catch (e) { console.error(name, e); }
-    }));
+    draws.forEach(([name, fn]) => runOne(name, fn));
   };
   let t = null;
   window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(run, 150); });
@@ -48,7 +50,12 @@ window.dash = (function () {
   });
   return {
     data: (id) => store[id] || {status: 'missing', data: [], columns: []},
-    draw: (name, fn) => { draws.push([name, fn]); },
+    draw: (name, fn) => {
+      if (fn) { draws.push([name, fn]); return; }
+      draws.filter(([n]) => n === name).forEach(([n, f]) => runOne(n, f));
+    },
+    params: () => Object.assign({}, params),
+    setParams: (p) => { params = Object.assign({}, params, p); run(); },
     onData: (fn) => { listeners.push(fn); },
     colors: ['#C9A55C', '#0B1F3A', '#5B8DB8', '#8A6D3B', '#3E7C59', '#B8382E', '#7A6FA8', '#9AA3B2'],
   };
@@ -81,6 +88,9 @@ window.dash = (function () {
 .cb-card h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
 .cb-note { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0; line-height: 1.45; }
 .cb-section-title { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: var(--cds-gap-md) 0 0; color: var(--color-fg); border-left: 3px solid var(--cdi-gold); padding-left: var(--cds-pad-sm); }
+.cb-periodo { display: flex; align-items: center; gap: var(--cds-gap-sm); flex-wrap: wrap; font-size: var(--cds-font-size-body); }
+.cb-periodo label { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); text-transform: uppercase; letter-spacing: .05em; }
+.cb-periodo select { font: inherit; color: var(--color-fg); background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: 6px 10px; min-width: 14rem; }
 .cb-grid2 { display: grid; gap: var(--cds-gap-md); grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); }
 .cb-chart { position: relative; min-height: 300px; }
 .cb-chart.cb-short { min-height: 260px; }
@@ -168,16 +178,20 @@ window.dash = (function () {
     </div>
   </section>
 
+  <div class="cb-periodo" id="periodo">
+    <label for="cb-periodo-sel">Período</label>
+    <select id="cb-periodo-sel" data-draw="periodo" data-source="periodos" aria-label="Período de los gráficos de aporte y rendimiento"></select>
+  </div>
   <div class="cb-grid2">
-    <section class="cb-card">
-      <h2>Aporte de cada componente desde el inicio</h2>
-      <p class="cb-note">En puntos porcentuales del rendimiento de la cartera.</p>
-      <div class="cb-chart cb-short" data-draw="chart-aporte" data-source="componentes"></div>
+    <section class="cb-card" id="aporte">
+      <h2>Aporte de cada componente</h2>
+      <p class="cb-note">En puntos porcentuales del rendimiento de la cartera en el período elegido. La suma de los aportes da el rendimiento de la cartera en ese período.</p>
+      <div class="cb-chart cb-short" data-draw="chart-aporte" data-source="periodos"></div>
     </section>
-    <section class="cb-card">
-      <h2>Rendimiento de cada componente desde el inicio</h2>
-      <p class="cb-note">Cada componente medido por separado, antes de ponderarlo en la cartera.</p>
-      <div class="cb-chart cb-short" data-draw="chart-rend" data-source="componentes"></div>
+    <section class="cb-card" id="rendimiento">
+      <h2>Rendimiento de cada componente</h2>
+      <p class="cb-note">Cada componente medido por separado en el período elegido, antes de ponderarlo en la cartera.</p>
+      <div class="cb-chart cb-short" data-draw="chart-rend" data-source="periodos"></div>
     </section>
   </div>
 
@@ -392,7 +406,7 @@ window.dash = (function () {
     const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
     const tmp = svg.append('text').attr('font-size', 12).text(d3.max(rows, (r) => r.componente) || '');
     let mL = 0; rows.forEach((r) => { tmp.text(r.componente); mL = Math.max(mL, tmp.node().getComputedTextLength()); }); tmp.remove();
-    mL = Math.min(mL + 14, W * 0.45);
+    mL = Math.min(mL * 1.08 + 18, W * 0.5);
     // Lugar reservado para las etiquetas de valor a cada lado, así no pisan los nombres
     const lab = svg.append('text').attr('font-size', 11);
     let padNeg = 0, padPos = 0;
@@ -416,8 +430,31 @@ window.dash = (function () {
       svg.append('text').attr('x', v >= 0 ? x(v) + 6 : x(v) - 6).attr('y', yy + 14).attr('text-anchor', v >= 0 ? 'start' : 'end').attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text(F.pct(v));
     });
   }
-  dash.draw('chart-aporte', (el) => { const c = dash.data('componentes'); if (c.status !== 'ok') { el.replaceChildren(); return; } barChart(el, c.data, 'aporte_inicio'); });
-  dash.draw('chart-rend', (el) => { const c = dash.data('componentes'); if (c.status !== 'ok') { el.replaceChildren(); return; } barChart(el, c.data, 'rend_inicio'); });
+  // Período elegido para los gráficos de aporte y rendimiento (por defecto, desde el inicio)
+  function periodoElegido(rows) {
+    const p = (dash.params && dash.params().periodo) || 'inicio';
+    return rows.some((r) => r.periodo === p) ? p : 'inicio';
+  }
+  dash.draw('periodo', (sel) => {
+    const g = dash.data('periodos');
+    const rows = g.status === 'ok' ? g.data : [];
+    const vistos = new Set();
+    const opciones = [];
+    rows.forEach((r) => { if (!vistos.has(r.periodo)) { vistos.add(r.periodo); opciones.push(new Option(r.etiqueta, r.periodo)); } });
+    sel.replaceChildren(...opciones);
+    if (opciones.length) sel.value = periodoElegido(rows);
+    sel.onchange = () => dash.setParams({periodo: sel.value});
+  });
+  const barrasDelPeriodo = (el, campo) => {
+    const g = dash.data('periodos');
+    if (g.status !== 'ok') { el.replaceChildren(); return; }
+    const p = periodoElegido(g.data);
+    barChart(el, g.data.filter((r) => r.periodo === p), campo);
+  };
+  dash.draw('chart-aporte', (el) => barrasDelPeriodo(el, 'aporte'));
+  dash.draw('chart-rend', (el) => barrasDelPeriodo(el, 'rend'));
+  // Cuando termina de cargar la tipografía, se redibujan las barras para que los nombres entren
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { dash.draw('chart-aporte'); dash.draw('chart-rend'); });
 })();
 </script>
 
