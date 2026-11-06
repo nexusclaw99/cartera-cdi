@@ -28,8 +28,8 @@ body { padding: 16px; }
 <script>
 /* Cargador de datos: reemplaza al de la plataforma (dash.data, dash.draw, dash.onData) */
 window.dash = (function () {
-  const IDS = ['serie', 'resumen', 'componentes', 'mensual', 'cambios', 'composicion', 'periodos'];
-  let params = {periodo: 'inicio'};
+  const IDS = ['serie', 'resumen', 'componentes', 'mensual', 'cambios', 'composicion', 'periodos', 'cartera_periodos', 'serie_periodos'];
+  let params = {periodo: 'inicio', periodo_cartera: 'inicio'};
   const store = {}; const draws = []; const listeners = [];
   IDS.forEach((id) => { store[id] = {status: 'loading', data: [], columns: []}; });
   const runOne = (name, fn) => document.querySelectorAll('[data-draw="' + name + '"]').forEach((el) => {
@@ -133,29 +133,33 @@ window.dash = (function () {
     <p class="cb-asof">Datos al cierre del <span data-draw="fecha-datos" data-source="resumen" data-field="fecha_datos">—</span> · Actualización diaria</p>
   </header>
 
+  <div class="cb-periodo" id="periodo-cartera">
+    <label for="cb-periodo-cartera">Período</label>
+    <select id="cb-periodo-cartera" data-draw="periodo-cartera" data-source="cartera_periodos" aria-label="Período del resumen y del gráfico del valor cuota"></select>
+  </div>
   <section class="cb-kpis" aria-label="Resumen">
     <div class="cb-kpi">
-      <p class="cb-kpi-label">Rendimiento desde el inicio (1/10)</p>
-      <p class="cb-kpi-value" data-draw="kpi-inicio" data-source="resumen" data-field="rend_inicio">—</p>
+      <p class="cb-kpi-label">Rendimiento del período</p>
+      <p class="cb-kpi-value" data-draw="kpi-periodo" data-source="cartera_periodos" data-field="rend" data-where="periodo=inicio">—</p>
     </div>
     <div class="cb-kpi">
       <p class="cb-kpi-label">Rendimiento del mes (MTD)</p>
       <p class="cb-kpi-value" data-draw="kpi-mes" data-source="resumen" data-field="rend_mes">—</p>
     </div>
     <div class="cb-kpi">
-      <p class="cb-kpi-label">Caída máxima</p>
-      <p class="cb-kpi-value" data-draw="kpi-dd" data-source="resumen" data-field="caida_maxima">—</p>
+      <p class="cb-kpi-label">Caída máxima del período</p>
+      <p class="cb-kpi-value" data-draw="kpi-dd" data-source="cartera_periodos" data-field="caida_maxima" data-where="periodo=inicio">—</p>
     </div>
     <div class="cb-kpi">
-      <p class="cb-kpi-label">Volatilidad anualizada</p>
-      <p class="cb-kpi-value" data-draw="kpi-vol" data-source="resumen" data-field="volatilidad">—</p>
+      <p class="cb-kpi-label">Volatilidad anualizada del período</p>
+      <p class="cb-kpi-value" data-draw="kpi-vol" data-source="cartera_periodos" data-field="volatilidad" data-where="periodo=inicio">—</p>
     </div>
   </section>
 
   <section class="cb-card" id="valor-cuota">
     <h2>Valor cuota de la cartera</h2>
-    <p class="cb-note">Base 100 al inicio, el 1 de octubre de 2026 (con los precios de cierre del 30 de septiembre). Valores de cierre de cada día hábil.</p>
-    <div class="cb-chart" data-draw="chart-nav" data-source="serie"></div>
+    <p class="cb-note">Base 100 al comienzo del período elegido, con los precios de cierre del último día hábil anterior (desde el inicio, el cierre del 30 de septiembre de 2026). Valores de cierre de cada día hábil.</p>
+    <div class="cb-chart" data-draw="chart-nav" data-source="serie_periodos"></div>
     <p class="cb-note cb-nav-partial">El gráfico se completa cuando estén cargados todos los componentes.</p>
   </section>
 
@@ -301,10 +305,35 @@ window.dash = (function () {
     el.textContent = pct(v, d, sign);
     if (sign) tone(el, v);
   });
-  kpi('kpi-inicio', 'rend_inicio');
   kpi('kpi-mes', 'rend_mes');
-  kpi('kpi-dd', 'caida_maxima', 2, false);
-  kpi('kpi-vol', 'volatilidad', 1, false);
+  // Período elegido arriba de las tarjetas (por defecto, desde el inicio)
+  const periodoCartera = (rows) => {
+    const p = (dash.params && dash.params().periodo_cartera) || 'inicio';
+    return rows.some((r) => r.periodo === p) ? p : 'inicio';
+  };
+  window.cbPeriodoCartera = periodoCartera;
+  const filaCartera = () => {
+    const g = dash.data('cartera_periodos');
+    if (g.status !== 'ok' || !g.data.length) return null;
+    const p = periodoCartera(g.data);
+    return g.data.find((r) => r.periodo === p) || null;
+  };
+  dash.draw('periodo-cartera', (sel) => {
+    const g = dash.data('cartera_periodos');
+    const rows = g.status === 'ok' ? g.data : [];
+    sel.replaceChildren(...rows.map((r) => new Option(r.etiqueta, r.periodo)));
+    if (rows.length) sel.value = periodoCartera(rows);
+    sel.onchange = () => dash.setParams({periodo_cartera: sel.value});
+  });
+  const kpiPeriodo = (name, field, d = 2, sign = true) => dash.draw(name, (el) => {
+    const r = filaCartera(); const v = r ? r[field] : null;
+    if (r) el.setAttribute('data-where', 'periodo=' + r.periodo);
+    el.textContent = pct(v, d, sign);
+    if (sign) tone(el, v);
+  });
+  kpiPeriodo('kpi-periodo', 'rend');
+  kpiPeriodo('kpi-dd', 'caida_maxima', 2, false);
+  kpiPeriodo('kpi-vol', 'volatilidad', 1, false);
 })();
 </script>
 
@@ -332,7 +361,8 @@ window.dash = (function () {
     svg.append('g').selectAll('text').data(ticks).join('text').attr('x', mL - 8).attr('y', (t) => y(t) + 4).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text((t) => F.num(t, 1));
     if (opts.base != null) svg.append('line').attr('x1', mL).attr('x2', W - 12).attr('y1', y(opts.base)).attr('y2', y(opts.base)).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '3 3');
     const nT = Math.max(2, Math.min(6, Math.floor((W - mL) / 90)));
-    const xt = x.ticks(nT);
+    // En períodos cortos las marcas del eje son los días con dato (sin fines de semana)
+    const xt = pts.length <= 12 ? pts.map((p) => p.d) : x.ticks(nT);
     svg.append('g').selectAll('text').data(xt).join('text').attr('x', (t) => x(t)).attr('y', H - 6).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text((t) => t.getUTCDate() + ' ' + ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][t.getUTCMonth()]);
     series.forEach((s) => {
       const ok = pts.filter((p) => p.r[s.key] != null);
@@ -365,9 +395,10 @@ window.dash = (function () {
   }
 
   dash.draw('chart-nav', (el) => {
-    const s = dash.data('serie');
-    if (s.status !== 'ok') { el.replaceChildren(); return; }
-    lineChart(el, s.data, [
+    const s = dash.data('serie_periodos');
+    if (s.status !== 'ok' || !s.data.length) { el.replaceChildren(); return; }
+    const p = window.cbPeriodoCartera(s.data);
+    lineChart(el, s.data.filter((r) => r.periodo === p), [
       {key: 'cartera', name: 'Cartera CDI', color: F.GOLD, width: 2.5},
     ], {height: 300, base: 100});
   });
