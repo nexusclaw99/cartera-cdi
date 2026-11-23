@@ -103,6 +103,8 @@ window.dash = (function () {
 .cb-sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
 .cb-sw-gold { background: var(--cdi-gold); }
 .cb-sw-muted { background: var(--cds-chart-muted); }
+.cb-sw-bench { background: #6B7686; }
+#valor-cuota .cb-legend { margin-top: var(--cds-gap-sm); }
 .cb-tablewrap { overflow-x: auto; }
 .cb-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-body); font-variant-numeric: tabular-nums; }
 .cb-table th { text-align: left; font-weight: var(--cds-font-weight-medium); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); text-transform: uppercase; letter-spacing: .05em; padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
@@ -158,7 +160,11 @@ window.dash = (function () {
 
   <section class="cb-card" id="valor-cuota">
     <h2>Valor cuota de la cartera</h2>
-    <p class="cb-note">Base 100 al comienzo del período elegido, con los precios de cierre del último día hábil anterior (desde el inicio, el cierre del 30 de septiembre de 2026). Valores de cierre de cada día hábil.</p>
+    <p class="cb-note">Base 100 al comienzo del período elegido, con los precios de cierre del último día hábil anterior (desde el inicio, el cierre del 30 de septiembre de 2026). Valores de cierre de cada día hábil. El benchmark es el portafolio 60/40 de iShares (AOR: 60% acciones y 40% bonos globales), con dividendos reinvertidos.</p>
+    <ul class="cb-legend" data-draw="nav-legend" data-source="cartera_periodos">
+      <li><span class="cb-sw cb-sw-gold"></span><span>Cartera CDI</span></li>
+      <li><span class="cb-sw cb-sw-bench"></span><span>60/40 (AOR), benchmark</span></li>
+    </ul>
     <div class="cb-chart" data-draw="chart-nav" data-source="serie_periodos"></div>
     <p class="cb-note cb-nav-partial">El gráfico se completa cuando estén cargados todos los componentes.</p>
   </section>
@@ -364,7 +370,8 @@ window.dash = (function () {
     // En períodos cortos las marcas del eje son los días con dato (sin fines de semana)
     const xt = pts.length <= 12 ? pts.map((p) => p.d) : x.ticks(nT);
     svg.append('g').selectAll('text').data(xt).join('text').attr('x', (t) => x(t)).attr('y', H - 6).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text((t) => t.getUTCDate() + ' ' + ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][t.getUTCMonth()]);
-    series.forEach((s) => {
+    // La primera serie se dibuja al final para que quede arriba de las demás
+    series.slice().reverse().forEach((s) => {
       const ok = pts.filter((p) => p.r[s.key] != null);
       if (!ok.length) return;
       svg.append('path').datum(ok).attr('fill', 'none').attr('stroke', s.color).attr('stroke-width', s.width || 2).attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round')
@@ -400,7 +407,22 @@ window.dash = (function () {
     const p = window.cbPeriodoCartera(s.data);
     lineChart(el, s.data.filter((r) => r.periodo === p), [
       {key: 'cartera', name: 'Cartera CDI', color: F.GOLD, width: 2.5},
+      {key: 'aor', name: '60/40 (AOR)', color: '#6B7686', width: 1.75},
     ], {height: 300, base: 100});
+  });
+
+  // Leyenda del gráfico con el rendimiento de cada línea en el período elegido
+  dash.draw('nav-legend', (ul) => {
+    const g = dash.data('cartera_periodos');
+    const rows = g.status === 'ok' ? g.data : [];
+    const r = rows.find((x) => x.periodo === window.cbPeriodoCartera(rows));
+    const items = [['cb-sw-gold', 'Cartera CDI', r && r.rend], ['cb-sw-bench', '60/40 (AOR), benchmark', r && r.aor_rend]];
+    ul.replaceChildren(...items.map(([cls, name, v]) => {
+      const li = document.createElement('li');
+      const sw = document.createElement('span'); sw.className = 'cb-sw ' + cls;
+      const tx = document.createElement('span'); tx.textContent = name + (v != null ? ' ' + F.pct(v) : '');
+      li.append(sw, tx); return li;
+    }));
   });
 
   dash.draw('multiples', (el) => {
